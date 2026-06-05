@@ -1,0 +1,6 @@
+# datasets:
+#   - Salesforce/wikitext
+#   - roneneldan/TinyStories
+#   - Skylion007/openwebtext
+
+# max_seq_length: 512

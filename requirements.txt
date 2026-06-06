@@ -6,3 +6,4 @@ accelerate
 trl
 wandb
 pyyaml
+pytest

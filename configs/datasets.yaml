@@ -32,7 +32,14 @@ datasets:
     - name: DeepPavlov/daily_dialog
       split: validation
       text_field: dialog
-      remove_columns: ["dialog", "act_label", "act_label_text", "emotion_label", "emotion_label_text"]
+      remove_columns:
+        [
+          "dialog",
+          "act_label",
+          "act_label_text",
+          "emotion_label",
+          "emotion_label_text",
+        ]
       max_samples: 5000
 
     - name: rajpurkar/squad
@@ -44,7 +51,17 @@ datasets:
     - name: dany0407/eli5_category
       split: validation1
       text_field: answers
-      remove_columns: ["q_id", "title", "selftext", "category", "subreddit", "answers", "title_urls", "selftext_urls"]
+      remove_columns:
+        [
+          "q_id",
+          "title",
+          "selftext",
+          "category",
+          "subreddit",
+          "answers",
+          "title_urls",
+          "selftext_urls",
+        ]
       max_samples: 5000
 
     - name: Yelp/yelp_review_full
@@ -56,7 +73,10 @@ datasets:
 preprocessing:
   lowercase: false
   strip_whitespace: true
+  normalize_whitespace: true
   remove_empty_samples: true
+  min_chars: 20
+  max_chars: 5000
 
 tokenization:
   max_length: 512

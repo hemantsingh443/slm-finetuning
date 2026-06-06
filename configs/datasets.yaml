@@ -78,7 +78,3 @@ preprocessing:
   min_chars: 20
   max_chars: 5000
 
-tokenization:
-  max_length: 512
-  truncation: true
-  padding: false

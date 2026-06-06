@@ -1,0 +1,5 @@
+tokenization:
+  max_length: 512
+  truncation: true
+  packing: true
+  num_proc: 4

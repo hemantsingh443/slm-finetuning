@@ -1,0 +1,16 @@
+evaluation:
+  metrics:
+    - token_loss
+    - sequence_loss
+    - perplexity
+    - bits_per_token
+
+  generation:
+    max_new_tokens: 100
+    temperature: 0.8
+    top_p: 0.95
+
+  length_buckets:
+    - 0-128
+    - 128-256
+    - 256-512

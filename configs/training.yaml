@@ -1,0 +1,16 @@
+seed: 42
+
+training:
+  epochs: 1
+  learning_rate: 2e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  max_grad_norm: 1.0
+  precision: fp16
+  gradient_checkpointing: true
+  save_steps: 500
+  eval_steps: 500
+  logging_steps: 10
+  lr_scheduler: cosine

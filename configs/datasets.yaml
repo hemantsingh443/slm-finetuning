@@ -1,6 +1,64 @@
-# datasets:
-#   - Salesforce/wikitext
-#   - roneneldan/TinyStories
-#   - Skylion007/openwebtext
+datasets:
+  train:
+    - name: roneneldan/TinyStories
+      split: train
+      text_field: text
+      remove_columns: ["text"]
+      weight: 0.30
+      max_samples: 100000
 
-# max_seq_length: 512
+    - name: Salesforce/wikitext
+      subset: wikitext-103-raw-v1
+      split: train
+      text_field: text
+      remove_columns: ["text"]
+      weight: 0.30
+      max_samples: 100000
+
+    - name: Skylion007/openwebtext
+      split: train
+      text_field: text
+      remove_columns: ["text"]
+      weight: 0.40
+      max_samples: 100000
+
+  eval:
+    - name: fancyzhx/ag_news
+      split: test
+      text_field: text
+      remove_columns: ["text", "label"]
+      max_samples: 10000
+
+    - name: DeepPavlov/daily_dialog
+      split: validation
+      text_field: dialog
+      remove_columns: ["dialog", "act_label", "act_label_text", "emotion_label", "emotion_label_text"]
+      max_samples: 5000
+
+    - name: rajpurkar/squad
+      split: validation
+      text_field: context
+      remove_columns: ["id", "title", "context", "question", "answers"]
+      max_samples: 5000
+
+    - name: dany0407/eli5_category
+      split: validation1
+      text_field: answers
+      remove_columns: ["q_id", "title", "selftext", "category", "subreddit", "answers", "title_urls", "selftext_urls"]
+      max_samples: 5000
+
+    - name: Yelp/yelp_review_full
+      split: test
+      text_field: text
+      remove_columns: ["label", "text"]
+      max_samples: 5000
+
+preprocessing:
+  lowercase: false
+  strip_whitespace: true
+  remove_empty_samples: true
+
+tokenization:
+  max_length: 512
+  truncation: true
+  padding: false

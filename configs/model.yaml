@@ -1,2 +1,12 @@
-# model_name: EleutherAI/pythia-410m
-# trust_remote_code: false
+model:
+  name: EleutherAI/pythia-410m
+
+tokenizer:
+  use_fast: true
+  trust_remote_code: false
+
+generation:
+  max_new_tokens: 100
+  temperature: 0.8
+  top_p: 0.95
+  do_sample: true

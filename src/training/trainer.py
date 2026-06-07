@@ -136,3 +136,43 @@ class CausalLMTrainer:
                 global_step += 1
 
         return step_losses
+
+    def evaluate(self, eval_dataset, name: str = None, global_step: int = None):
+        """Runs evaluation on eval_dataset and logs metrics to W&B."""
+        from src.evaluation.metrics import evaluate_model
+        
+        metrics = evaluate_model(
+            model=self.model,
+            eval_dataset=eval_dataset,
+            device=self.device,
+            batch_size=self.batch_size,
+        )
+        
+        overall = metrics["overall"]
+        token_loss = overall["token_loss"]
+        ppl = overall["perplexity"]
+        bpt = overall["bits_per_token"]
+        
+        prefix = f"val/{name}/" if name else "val/"
+        
+        log_dict = {
+            f"{prefix}token_loss": token_loss,
+            f"{prefix}ppl": ppl,
+            f"{prefix}bpt": bpt,
+        }
+        
+        if name:
+            log_dict["val/token_loss"] = token_loss
+            log_dict["val/ppl"] = ppl
+            log_dict["val/bpt"] = bpt
+
+        name_str = f" [{name}]" if name else ""
+        print(f"Validation{name_str} | Loss: {token_loss:.4f} | PPL: {ppl:.4f} | BPT: {bpt:.4f}", flush=True)
+
+        if self.wandb_logger:
+            log_payload = {**log_dict}
+            if global_step is not None:
+                log_payload["step"] = global_step
+            self.wandb_logger.log(log_payload, step=global_step)
+
+        return metrics

@@ -139,6 +139,13 @@ class TestTrainingSmoke(unittest.TestCase):
         )
         
         losses = trainer.train()
+        
+        # Evaluate model after training to verify validation pipeline and metrics logging
+        eval_metrics = trainer.evaluate(tiny_train_dataset, name="smoke_val")
+        self.assertIsNotNone(eval_metrics)
+        self.assertIn("overall", eval_metrics)
+        self.assertIn("token_loss", eval_metrics["overall"])
+        
         wandb_logger.finish()
 
         self.assertEqual(len(losses), 10, "Expected exactly 10 training steps.")

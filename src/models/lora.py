@@ -1,4 +1,4 @@
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, get_peft_model, TaskType
 
 def get_lora_model(model, lora_config: dict):
     lora_settings = lora_config.get("lora", {})

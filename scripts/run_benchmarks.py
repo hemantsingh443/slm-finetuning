@@ -186,6 +186,44 @@ def main():
             ])
     print(f"Exported Rank Comparison CSV to: {rank_csv_path}", flush=True)
 
+    # Export CSV & JSON for Sequence Length Scaling
+    seq_csv_path = os.path.join(results_dir, "seq_len_scaling.csv")
+    with open(seq_csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["sequence_length", "generation_latency_s", "tokens_per_sec", "peak_memory_gb"])
+        for res in seq_results:
+            writer.writerow([res["sequence_length"], res["generation_latency_s"], res["tokens_per_sec"], res["peak_memory_gb"]])
+            
+    seq_json_path = os.path.join(results_dir, "seq_len_scaling.json")
+    with open(seq_json_path, "w") as f:
+        json.dump(seq_results, f, indent=2)
+
+    # Export CSV & JSON for Batch Size Scaling
+    batch_csv_path = os.path.join(results_dir, "batch_size_scaling.csv")
+    with open(batch_csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["batch_size", "generation_latency_s", "tokens_per_sec", "peak_memory_gb"])
+        for res in batch_results:
+            writer.writerow([res["batch_size"], res["generation_latency_s"], res["tokens_per_sec"], res["peak_memory_gb"]])
+            
+    batch_json_path = os.path.join(results_dir, "batch_size_scaling.json")
+    with open(batch_json_path, "w") as f:
+        json.dump(batch_results, f, indent=2)
+
+    # Export CSV & JSON for Precision Scaling
+    prec_csv_path = os.path.join(results_dir, "precision_scaling.csv")
+    with open(prec_csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["precision", "generation_latency_s", "tokens_per_sec", "peak_memory_gb"])
+        for res in prec_results:
+            writer.writerow([res["precision"], res["generation_latency_s"], res["tokens_per_sec"], res["peak_memory_gb"]])
+            
+    prec_json_path = os.path.join(results_dir, "precision_scaling.json")
+    with open(prec_json_path, "w") as f:
+        json.dump(prec_results, f, indent=2)
+        
+    print(f"Exported all additional scaling metrics (CSV & JSON) to: {results_dir}", flush=True)
+
 if __name__ == "__main__":
     # Import torch here to avoid import time overhead
     import torch

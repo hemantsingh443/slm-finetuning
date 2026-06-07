@@ -19,6 +19,15 @@ def create_dataset_mixture(
         adapted_ds = load_and_adapt_dataset(dataset_info, streaming=streaming)
         preprocessed_ds = preprocess_dataset(adapted_ds, preprocessing_config)
 
+        # Apply max_samples limit if present
+        max_samples = dataset_info.get("max_samples", None)
+        if max_samples:
+            if streaming:
+                preprocessed_ds = preprocessed_ds.take(max_samples)
+            else:
+                if max_samples < len(preprocessed_ds):
+                    preprocessed_ds = preprocessed_ds.select(range(max_samples))
+
         # Shuffle each dataset before mixing
         if not streaming:
             preprocessed_ds = preprocessed_ds.shuffle(seed=seed)

@@ -72,8 +72,8 @@ def main():
     train_mixture_config = datasets_config.get("datasets", {}).get("train", [])
     preprocessing_config = datasets_config.get("preprocessing", {})
     
-    # Enable streaming if limit_samples is specified
-    use_streaming = args.limit_samples is not None
+    # Enable streaming if limit_samples is specified and small
+    use_streaming = args.limit_samples is not None and args.limit_samples <= 10000
 
     train_mixture = create_dataset_mixture(
         datasets_config=train_mixture_config,

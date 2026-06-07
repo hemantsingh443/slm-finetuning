@@ -16,6 +16,7 @@ class CausalLMTrainer:
         training_config: dict = None,
         wandb_logger=None,
         scheduler=None,
+        tokenizer=None,
     ):
         self.model = model.to(device)
         self.train_dataset = train_dataset
@@ -24,6 +25,7 @@ class CausalLMTrainer:
         self.device = device
         self.wandb_logger = wandb_logger
         self.training_config = training_config
+        self.tokenizer = tokenizer
 
         self.config = training_config.get("training", {}) if training_config else {}
         self.batch_size = self.config.get("batch_size", 1)
@@ -137,7 +139,7 @@ class CausalLMTrainer:
 
         return step_losses
 
-    def evaluate(self, eval_dataset, name: str = None, global_step: int = None):
+    def evaluate(self, eval_dataset, name: str = None, global_step: int = None, prompts: list = None):
         """Runs evaluation on eval_dataset and logs metrics to W&B."""
         from src.evaluation.metrics import evaluate_model
         
@@ -166,8 +168,27 @@ class CausalLMTrainer:
             log_dict["val/ppl"] = ppl
             log_dict["val/bpt"] = bpt
 
+        # Log bucket metrics (e.g. perplexity, token_loss, bits_per_token by length bucket)
+        for bucket_key, b_metrics in metrics.get("buckets", {}).items():
+            b_loss = b_metrics["token_loss"]
+            b_ppl = b_metrics["perplexity"]
+            b_bpt = b_metrics["bits_per_token"]
+            
+            log_dict[f"{prefix}token_loss/{bucket_key}"] = b_loss
+            log_dict[f"{prefix}ppl/{bucket_key}"] = b_ppl
+            log_dict[f"{prefix}bpt/{bucket_key}"] = b_bpt
+            
+            if name:
+                log_dict[f"val/token_loss/{bucket_key}"] = b_loss
+                log_dict[f"val/ppl/{bucket_key}"] = b_ppl
+                log_dict[f"val/bpt/{bucket_key}"] = b_bpt
+
         name_str = f" [{name}]" if name else ""
         print(f"Validation{name_str} | Loss: {token_loss:.4f} | PPL: {ppl:.4f} | BPT: {bpt:.4f}", flush=True)
+
+        for bucket_key, b_metrics in metrics.get("buckets", {}).items():
+            b_ppl = b_metrics["perplexity"]
+            print(f"  Bucket {bucket_key} | PPL: {b_ppl:.4f}", flush=True)
 
         if self.wandb_logger:
             log_payload = {**log_dict}
@@ -175,4 +196,46 @@ class CausalLMTrainer:
                 log_payload["step"] = global_step
             self.wandb_logger.log(log_payload, step=global_step)
 
+        # Log generated examples if tokenizer is available
+        if self.tokenizer:
+            if prompts is None:
+                prompts = ["The future of AI"]
+            self.log_generations(prompts, global_step=global_step)
+
         return metrics
+
+    def log_generations(self, prompts: list, generation_config: dict = None, global_step: int = None):
+        """Generates samples for prompts and logs them to W&B."""
+        if not self.tokenizer:
+            print("Cannot generate samples: Tokenizer not set in trainer.", flush=True)
+            return
+            
+        from src.inference.generate import generate_text
+        import wandb
+        
+        gen_config = generation_config or {}
+        max_new_tokens = gen_config.get("max_new_tokens", 50)
+        temperature = gen_config.get("temperature", 0.8)
+        top_p = gen_config.get("top_p", 0.95)
+        do_sample = gen_config.get("do_sample", True)
+
+        table_rows = []
+        for prompt in prompts:
+            output = generate_text(
+                model=self.model,
+                tokenizer=self.tokenizer,
+                prompt=prompt,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                do_sample=do_sample,
+                device=self.device,
+            )
+            # Encode/decode to handle console printing on CP1252 / ASCII environments safely
+            safe_output = output.encode('ascii', errors='replace').decode('ascii')
+            print(f"Prompt: {prompt}\nGenerated: {safe_output}\n---", flush=True)
+            table_rows.append([prompt, output])
+
+        if self.wandb_logger and wandb.run:
+            table = wandb.Table(columns=["prompt", "generation"], data=table_rows)
+            self.wandb_logger.log({"val/examples": table}, step=global_step)

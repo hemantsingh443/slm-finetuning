@@ -135,13 +135,14 @@ class TestTrainingSmoke(unittest.TestCase):
             optimizer=optimizer,
             device="cpu",
             training_config=training_config,
-            wandb_logger=wandb_logger
+            wandb_logger=wandb_logger,
+            tokenizer=tokenizer
         )
         
         losses = trainer.train()
         
         # Evaluate model after training to verify validation pipeline and metrics logging
-        eval_metrics = trainer.evaluate(tiny_train_dataset, name="smoke_val")
+        eval_metrics = trainer.evaluate(tiny_train_dataset, name="smoke_val", prompts=["The future of AI"])
         self.assertIsNotNone(eval_metrics)
         self.assertIn("overall", eval_metrics)
         self.assertIn("token_loss", eval_metrics["overall"])

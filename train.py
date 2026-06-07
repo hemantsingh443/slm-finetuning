@@ -20,10 +20,6 @@ def main():
     parser.add_argument("--epochs", type=int, default=None, help="Force number of epochs")
     parser.add_argument("--model_name", type=str, default=None, help="Override model name")
     parser.add_argument("--limit_samples", type=int, default=None, help="Limit number of dataset samples loaded")
-    parser.add_argument("--checkpoint_dir", type=str, default="checkpoints", help="Directory to save checkpoints")
-    parser.add_argument("--lora_rank", type=int, default=None, help="Override LoRA rank")
-    parser.add_argument("--batch_size", type=int, default=None, help="Override training batch size")
-    parser.add_argument("--precision", type=str, default=None, choices=["fp32", "fp16", "bf16"], help="Override precision mode")
     args = parser.parse_args()
 
     # Load configs
@@ -52,13 +48,6 @@ def main():
         training_config["training"]["eval_steps"] = max(1, args.steps // 2)
     if args.epochs:
         training_config["training"]["epochs"] = args.epochs
-    if args.lora_rank:
-        lora_config["lora"]["rank"] = args.lora_rank
-        lora_config["lora"]["alpha"] = args.lora_rank * 2
-    if args.batch_size:
-        training_config["training"]["batch_size"] = args.batch_size
-    if args.precision:
-        training_config["training"]["precision"] = args.precision
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}", flush=True)
@@ -161,7 +150,7 @@ def main():
     wandb_logger.initialize()
 
     # 5. Initialize CheckpointManager
-    checkpoint_manager = CheckpointManager(base_dir=args.checkpoint_dir, wandb_logger=wandb_logger)
+    checkpoint_manager = CheckpointManager(base_dir="checkpoints", wandb_logger=wandb_logger)
 
     # 6. Initialize Optimizer
     optimizer = torch.optim.AdamW(

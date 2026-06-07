@@ -45,7 +45,15 @@ def main():
     print(f"Starting Benchmark Suite for Model: {model_name}", flush=True)
     print(f"==================================================\n", flush=True)
 
-    results_dir = os.path.join(project_root, "results")
+    # Extract the run folder name to prevent overwriting results
+    norm_path = os.path.normpath(model_name)
+    path_parts = norm_path.split(os.sep)
+    if len(path_parts) >= 2 and path_parts[-1] == "final":
+        run_name = path_parts[-2]
+    else:
+        run_name = path_parts[-1].replace("/", "_").replace("\\", "_")
+
+    results_dir = os.path.join(project_root, "results", run_name)
     os.makedirs(results_dir, exist_ok=True)
 
     # Control precision for GPU/CPU: fp16 on GPU, fp32 on CPU

@@ -1,0 +1,5 @@
+batch_size,generation_latency_s,tokens_per_sec,peak_memory_gb
+1,1.3121,38.11,0.9622
+2,1.4827,67.44,1.1511
+4,1.464,136.61,1.5325
+8,1.672,239.24,2.2971

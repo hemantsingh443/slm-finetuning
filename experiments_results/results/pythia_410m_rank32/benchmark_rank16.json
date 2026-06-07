@@ -1,0 +1,14 @@
+{
+  "model_name": "checkpoints/pythia_410m_rank32/final",
+  "lora_rank": 16,
+  "batch_size": 1,
+  "sequence_length": 512,
+  "precision": "fp16",
+  "trainable_params": 0,
+  "all_params": 408479744,
+  "forward_latency_s": 0.0291,
+  "generation_latency_s": 1.2756,
+  "generated_tokens": 50,
+  "tokens_per_sec": 39.2,
+  "peak_memory_gb": 0.968
+}

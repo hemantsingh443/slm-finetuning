@@ -1,0 +1,5 @@
+sequence_length,generation_latency_s,tokens_per_sec,peak_memory_gb
+128,1.3275,37.66,0.8145
+256,1.3791,36.26,0.8622
+512,1.352,36.98,0.9592
+1024,1.5105,33.1,1.1482

@@ -1,0 +1,58 @@
+[
+  {
+    "model_name": "checkpoints/pythia_410m_final/final",
+    "lora_rank": 16,
+    "batch_size": 1,
+    "sequence_length": 128,
+    "precision": "fp16",
+    "trainable_params": 0,
+    "all_params": 406906880,
+    "forward_latency_s": 0.0272,
+    "generation_latency_s": 0.0794,
+    "generated_tokens": 3,
+    "tokens_per_sec": 37.79,
+    "peak_memory_gb": 0.8174
+  },
+  {
+    "model_name": "checkpoints/pythia_410m_final/final",
+    "lora_rank": 16,
+    "batch_size": 1,
+    "sequence_length": 256,
+    "precision": "fp16",
+    "trainable_params": 0,
+    "all_params": 406906880,
+    "forward_latency_s": 0.0291,
+    "generation_latency_s": 1.4014,
+    "generated_tokens": 50,
+    "tokens_per_sec": 35.68,
+    "peak_memory_gb": 0.8651
+  },
+  {
+    "model_name": "checkpoints/pythia_410m_final/final",
+    "lora_rank": 16,
+    "batch_size": 1,
+    "sequence_length": 512,
+    "precision": "fp16",
+    "trainable_params": 0,
+    "all_params": 406906880,
+    "forward_latency_s": 0.0306,
+    "generation_latency_s": 0.0795,
+    "generated_tokens": 1,
+    "tokens_per_sec": 12.58,
+    "peak_memory_gb": 0.9622
+  },
+  {
+    "model_name": "checkpoints/pythia_410m_final/final",
+    "lora_rank": 16,
+    "batch_size": 1,
+    "sequence_length": 1024,
+    "precision": "fp16",
+    "trainable_params": 0,
+    "all_params": 406906880,
+    "forward_latency_s": 0.0435,
+    "generation_latency_s": 0.2946,
+    "generated_tokens": 7,
+    "tokens_per_sec": 23.76,
+    "peak_memory_gb": 1.1511
+  }
+]

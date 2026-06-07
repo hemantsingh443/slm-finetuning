@@ -1,0 +1,4 @@
+lora_rank,trainable_params,generation_latency_s,tokens_per_sec,peak_memory_gb
+8,0,1.5721,31.8,0.9592
+16,0,1.2803,39.05,0.9592
+32,0,0.0712,14.05,0.9592

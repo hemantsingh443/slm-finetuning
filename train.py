@@ -47,7 +47,7 @@ def main():
     if args.steps:
         training_config["training"]["max_steps"] = args.steps
         # Automatically make logging, save, and eval steps fit within the test steps
-        training_config["training"]["logging_steps"] = max(1, args.steps // 10)
+        training_config["training"]["logging_steps"] = min(100, max(1, args.steps // 10))
         training_config["training"]["save_steps"] = max(1, args.steps // 2)
         training_config["training"]["eval_steps"] = max(1, args.steps // 2)
     if args.epochs:

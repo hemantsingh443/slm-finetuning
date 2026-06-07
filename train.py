@@ -152,7 +152,7 @@ def main():
             "batch_size": training_config["training"].get("batch_size", 1),
             "learning_rate": training_config["training"].get("learning_rate", 2e-4),
         },
-        name=f"run-{model_config['model']['name'].split('/')[-1]}",
+        name=f"run-{model_config['model']['name'].split('/')[-1]}-rank{lora_config['lora']['rank']}",
     )
     wandb_logger.initialize()
 

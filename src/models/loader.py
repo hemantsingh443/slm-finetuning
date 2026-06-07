@@ -45,3 +45,34 @@ def load_model_and_tokenizer(model_config: dict, training_config: dict = None):
 
     return model, tokenizer
 
+
+def load_peft_checkpoint_or_base(model_name: str, training_config: dict = None):
+    """Loads either a base causal LM model or a wrapped PEFT checkpoint."""
+    import os
+    import json
+    from peft import PeftModel
+    
+    adapter_config_path = os.path.join(model_name, "adapter_config.json")
+    if os.path.isdir(model_name) and os.path.exists(adapter_config_path):
+        with open(adapter_config_path, "r") as f:
+            adapter_config = json.load(f)
+        base_model_name = adapter_config.get("base_model_name_or_path")
+        
+        # Load base model & tokenizer
+        model_config = {
+            "model": {"name": base_model_name},
+            "tokenizer": {"use_fast": True, "trust_remote_code": False}
+        }
+        base_model, tokenizer = load_model_and_tokenizer(model_config, training_config)
+        
+        print(f"Loading PEFT adapter from checkpoint: {model_name}...", flush=True)
+        model = PeftModel.from_pretrained(base_model, model_name)
+        return model, tokenizer
+    else:
+        model_config = {
+            "model": {"name": model_name},
+            "tokenizer": {"use_fast": True, "trust_remote_code": False}
+        }
+        return load_model_and_tokenizer(model_config, training_config)
+
+

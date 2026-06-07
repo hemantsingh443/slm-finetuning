@@ -57,10 +57,15 @@ def benchmark_config(
     }
 
     # Load model and tokenizer
-    model, tokenizer = load_model_and_tokenizer(model_config, training_config)
+    from src.models.loader import load_peft_checkpoint_or_base
     
-    # Apply LoRA Peft adapter
-    peft_model = get_lora_model(model, lora_config)
+    adapter_config_path = os.path.join(model_name, "adapter_config.json")
+    if os.path.isdir(model_name) and os.path.exists(adapter_config_path):
+        peft_model, tokenizer = load_peft_checkpoint_or_base(model_name, training_config)
+    else:
+        model, tokenizer = load_model_and_tokenizer(model_config, training_config)
+        peft_model = get_lora_model(model, lora_config)
+
     peft_model = peft_model.to(device)
     peft_model.eval()
 
@@ -110,7 +115,8 @@ def benchmark_config(
 
     # Clean up model
     del peft_model
-    del model
+    if "model" in locals():
+        del model
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     gc.collect()

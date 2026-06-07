@@ -1,29 +1,29 @@
+import argparse
 import os
 import yaml
-import argparse
 import torch
-from transformers import get_cosine_schedule_with_warmup
+from datasets import Dataset
 
-from src.data.mixture import create_dataset_mixture
-from src.data.tokenizer import LMTokenizerWrapper
 from src.data.loader import load_and_adapt_dataset
 from src.data.preprocess import preprocess_dataset
-from src.data.statistics import generate_and_save_all_stats
+from src.data.mixture import create_dataset_mixture
+from src.data.tokenizer import LMTokenizerWrapper
 from src.models.loader import load_model_and_tokenizer
 from src.models.lora import get_lora_model
 from src.training.callbacks import WandBLogger
 from src.training.trainer import CausalLMTrainer
+from src.training.checkpoint_manager import CheckpointManager
 
 def main():
-    parser = argparse.ArgumentParser(description="Fine-tune Causal LM with LoRA")
-    parser.add_argument("--configs_dir", type=str, default="configs", help="Directory containing config files")
-    parser.add_argument("--limit_samples", type=int, default=None, help="Limit number of train/eval samples for quick testing")
-    parser.add_argument("--wandb_project", type=str, default="slm-finetuning", help="W&B Project Name")
-    parser.add_argument("--wandb_name", type=str, default=None, help="W&B Run Name")
+    parser = argparse.ArgumentParser(description="SLM Fine-tuning pipeline")
+    parser.add_argument("--steps", type=int, default=None, help="Force number of training steps")
+    parser.add_argument("--epochs", type=int, default=None, help="Force number of epochs")
+    parser.add_argument("--model_name", type=str, default=None, help="Override model name")
+    parser.add_argument("--limit_samples", type=int, default=None, help="Limit number of dataset samples loaded")
     args = parser.parse_args()
 
-    # 1. Load configs
-    configs_dir = args.configs_dir
+    # Load configs
+    configs_dir = "configs"
     with open(os.path.join(configs_dir, "model.yaml"), "r") as f:
         model_config = yaml.safe_load(f)
     with open(os.path.join(configs_dir, "training.yaml"), "r") as f:
@@ -37,159 +37,147 @@ def main():
     with open(os.path.join(configs_dir, "evaluation.yaml"), "r") as f:
         evaluation_config = yaml.safe_load(f)
 
-    # Combine configurations for W&B
-    full_config = {
-        **model_config,
-        **training_config,
-        **lora_config,
-        **datasets_config,
-        **tokenization_config,
-        **evaluation_config
-    }
+    # Overrides
+    if args.model_name:
+        model_config["model"]["name"] = args.model_name
+    if args.steps:
+        training_config["training"]["max_steps"] = args.steps
+        # Automatically make logging, save, and eval steps fit within the test steps
+        training_config["training"]["logging_steps"] = max(1, args.steps // 10)
+        training_config["training"]["save_steps"] = max(1, args.steps // 2)
+        training_config["training"]["eval_steps"] = max(1, args.steps // 2)
+    if args.epochs:
+        training_config["training"]["epochs"] = args.epochs
 
-    # 2. Generate and save dataset statistics report
-    print("\n--- Generating Dataset Statistics ---")
-    generate_and_save_all_stats(
-        config_path=os.path.join(configs_dir, "datasets.yaml"),
-        output_path="reports/dataset_stats.json",
-        limit_samples=args.limit_samples
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}", flush=True)
+
+    # 1. Load Model & Tokenizer
+    print("Loading model and tokenizer...", flush=True)
+    model, tokenizer = load_model_and_tokenizer(model_config, training_config)
+
+    # 2. Build datasets
+    print("Loading training dataset mixture...", flush=True)
+    train_mixture_config = datasets_config.get("datasets", {}).get("train", [])
+    preprocessing_config = datasets_config.get("preprocessing", {})
+    
+    # Enable streaming if limit_samples is specified and small
+    use_streaming = args.limit_samples is not None and args.limit_samples <= 10000
+
+    train_mixture = create_dataset_mixture(
+        datasets_config=train_mixture_config,
+        preprocessing_config=preprocessing_config,
+        streaming=use_streaming,
+        seed=training_config.get("seed", 42),
     )
 
-    # 3. Load Model and Tokenizer
-    print("\n--- Loading Model and Tokenizer ---")
-    model, tokenizer = load_model_and_tokenizer(model_config, training_config)
+    if use_streaming:
+        print(f"Streaming mode enabled. Materializing first {args.limit_samples} samples...", flush=True)
+        train_mixture = train_mixture.take(args.limit_samples)
+        train_mixture = Dataset.from_list(list(train_mixture))
+    else:
+        # Apply limit_samples to non-streaming train configs if specified
+        if args.limit_samples and args.limit_samples < len(train_mixture):
+            train_mixture = train_mixture.select(range(args.limit_samples))
+
+    print(f"Loaded training dataset of size: {len(train_mixture)}", flush=True)
+
+    # Pack training dataset
+    print("Tokenizing and packing training dataset...", flush=True)
+    tokenizer_wrapper = LMTokenizerWrapper(tokenizer)
+    packed_train_dataset = tokenizer_wrapper.tokenize_and_pack(train_mixture, tokenization_config)
+    print(f"Packed training dataset contains {len(packed_train_dataset)} sequences", flush=True)
+
+    # Load and process evaluation datasets
+    print("Loading and tokenizing evaluation datasets...", flush=True)
+    eval_datasets = {}
     
-    # 4. Apply LoRA Adaptor
-    print("\n--- Applying LoRA adapter config ---")
+    def tokenize_eval_fn(examples):
+        outputs = tokenizer(
+            examples["text"],
+            truncation=True,
+            max_length=tokenization_config.get("tokenization", {}).get("max_length", 512),
+        )
+        outputs["labels"] = [ids.copy() for ids in outputs["input_ids"]]
+        return outputs
+
+    for eval_info in datasets_config.get("datasets", {}).get("eval", []):
+        raw_name = eval_info["name"]
+        short_name = raw_name.split("/")[-1]
+        print(f"Processing eval dataset: {short_name}...", flush=True)
+        
+        eval_ds = load_and_adapt_dataset(eval_info, streaming=use_streaming)
+        
+        max_samples = eval_info.get("max_samples", None)
+        if args.limit_samples:
+            max_samples = min(max_samples, args.limit_samples) if max_samples else args.limit_samples
+            
+        if use_streaming:
+            if max_samples:
+                eval_ds = eval_ds.take(max_samples)
+            eval_ds = Dataset.from_list(list(eval_ds))
+        else:
+            if max_samples and max_samples < len(eval_ds):
+                eval_ds = eval_ds.select(range(max_samples))
+            
+        eval_ds = preprocess_dataset(eval_ds, preprocessing_config)
+        
+        # Tokenize without packing
+        eval_tokenized = eval_ds.map(
+            tokenize_eval_fn,
+            batched=True,
+            remove_columns=eval_ds.column_names,
+        )
+        eval_datasets[short_name] = eval_tokenized
+
+    # 3. Apply LoRA PEFT Adapters
+    print("Applying LoRA PEFT adapters...", flush=True)
     peft_model = get_lora_model(model, lora_config)
     peft_model.print_trainable_parameters()
 
-    # 5. Build datasets
-    print("\n--- Loading and adapting training datasets mixture ---")
-    train_datasets = datasets_config.get("datasets", {}).get("train", [])
-    preprocessing_config = datasets_config.get("preprocessing", {})
-    
-    # Optional limit for quick run
-    if args.limit_samples:
-        for ds_info in train_datasets:
-            ds_info["max_samples"] = min(ds_info.get("max_samples", float('inf')), args.limit_samples)
-
-    train_mixture = create_dataset_mixture(
-        datasets_config=train_datasets,
-        preprocessing_config=preprocessing_config,
-        streaming=False,
-        seed=training_config.get("seed", 42)
-    )
-
-    # Tokenize and pack training dataset
-    print("\n--- Tokenizing and Packing training dataset ---")
-    tokenizer_wrapper = LMTokenizerWrapper(tokenizer)
-    tokenized_train_ds = tokenizer_wrapper.tokenize_and_pack(train_mixture, tokenization_config)
-    print(f"Packed training dataset contains {len(tokenized_train_ds)} samples.")
-
-    # Load and preprocess evaluation datasets (evaluate them separately)
-    eval_datasets = datasets_config.get("datasets", {}).get("eval", [])
-    tokenized_eval_datasets = {}
-    for eval_ds_info in eval_datasets:
-        name = eval_ds_info["name"]
-        short_name = name.split("/")[-1]
-        print(f"Loading evaluation dataset: {short_name}...")
-        eval_ds = load_and_adapt_dataset(eval_ds_info, streaming=False)
-        
-        if args.limit_samples:
-            max_s = min(eval_ds_info.get("max_samples", float('inf')), args.limit_samples)
-            if max_s < len(eval_ds):
-                eval_ds = eval_ds.select(range(max_s))
-                
-        eval_ds = preprocess_dataset(eval_ds, preprocessing_config)
-        
-        # Tokenize (DO NOT PACK evaluation datasets to preserve length buckets analysis)
-        def tokenize_eval_fn(examples):
-            return tokenizer(examples["text"], truncation=True, max_length=tokenization_config.get("tokenization", {}).get("max_length", 512))
-            
-        remove_cols = [c for c in ["text", "source"] if c in eval_ds.column_names]
-        tokenized_eval_ds = eval_ds.map(
-            tokenize_eval_fn,
-            batched=True,
-            remove_columns=remove_cols,
-            num_proc=tokenization_config.get("tokenization", {}).get("num_proc", 4)
-        )
-        
-        # Set target labels to input_ids (and make sure padding tokens are masked to -100)
-        def map_eval_labels(example):
-            example["labels"] = example["input_ids"].copy()
-            return example
-            
-        tokenized_eval_ds = tokenized_eval_ds.map(map_eval_labels)
-        tokenized_eval_datasets[short_name] = tokenized_eval_ds
-
-    # 6. Initialize W&B Logger
-    print("\n--- Initializing W&B Logger ---")
+    # 4. Initialize W&B Logger
+    print("Initializing W&B run...", flush=True)
     wandb_logger = WandBLogger(
-        project=args.wandb_project,
-        config=full_config,
-        name=args.wandb_name
+        project="slm-finetuning",
+        config={
+            "model_name": model_config["model"]["name"],
+            "lora_rank": lora_config["lora"]["rank"],
+            "batch_size": training_config["training"].get("batch_size", 1),
+            "learning_rate": training_config["training"].get("learning_rate", 2e-4),
+        },
+        name=f"run-{model_config['model']['name'].split('/')[-1]}",
     )
     wandb_logger.initialize()
 
-    # 7. Optimizer & Scheduler
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # 5. Initialize CheckpointManager
+    checkpoint_manager = CheckpointManager(base_dir="checkpoints", wandb_logger=wandb_logger)
+
+    # 6. Initialize Optimizer
     optimizer = torch.optim.AdamW(
         peft_model.parameters(),
-        lr=float(training_config.get("training", {}).get("learning_rate", 2e-4)),
-        weight_decay=float(training_config.get("training", {}).get("weight_decay", 0.01))
+        lr=float(training_config["training"].get("learning_rate", 2e-4)),
+        weight_decay=float(training_config["training"].get("weight_decay", 0.01)),
     )
-
-    # Cosine scheduler setup
-    num_training_steps = len(tokenized_train_ds) * int(training_config.get("training", {}).get("epochs", 1))
-    warmup_steps = int(num_training_steps * float(training_config.get("training", {}).get("warmup_ratio", 0.03)))
     
-    scheduler = get_cosine_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=warmup_steps,
-        num_training_steps=num_training_steps
-    )
-
-    # 8. Trainer
-    print("\n--- Initializing CausalLMTrainer ---")
+    # 7. Initialize Trainer and run training
+    print("Initializing CausalLMTrainer and starting training...", flush=True)
     trainer = CausalLMTrainer(
         model=peft_model,
-        train_dataset=tokenized_train_ds,
+        train_dataset=packed_train_dataset,
         optimizer=optimizer,
         device=device,
         training_config=training_config,
         wandb_logger=wandb_logger,
-        scheduler=scheduler,
-        tokenizer=tokenizer
+        tokenizer=tokenizer,
+        checkpoint_manager=checkpoint_manager,
+        eval_dataset=eval_datasets,
     )
-
-    # 9. Train and Evaluate
-    print("\n--- Starting Model Training ---")
-    _ = trainer.train()
-
-    print("\n--- Starting Evaluation ---")
-    eval_results = {}
-    prompts = ["Once upon a time", "The future of AI", "Deep learning is"]
     
-    for short_name, eval_ds in tokenized_eval_datasets.items():
-        print(f"\nEvaluating dataset: {short_name}...")
-        metrics = trainer.evaluate(eval_ds, name=short_name, prompts=prompts)
-        eval_results[short_name] = metrics
-
-    # Save final evaluation results report
-    os.makedirs("reports", exist_ok=True)
-    with open("reports/eval_results.json", "w") as f:
-        import json
-        json.dump(eval_results, f, indent=2)
-    print("\nEvaluation results saved to reports/eval_results.json")
-
-    # 10. Close Logger and Save Model
+    trainer.train()
+    
+    # Finish W&B
     wandb_logger.finish()
-    
-    # Save adapter checkpoints
-    peft_model.save_pretrained("checkpoints/final_lora_adapter")
-    tokenizer.save_pretrained("checkpoints/final_lora_adapter")
-    print("Model checkpoints saved to checkpoints/final_lora_adapter")
+    print("Training pipeline run completed successfully!", flush=True)
 
 if __name__ == "__main__":
     main()

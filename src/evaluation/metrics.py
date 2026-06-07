@@ -1,7 +1,25 @@
 import torch
 import math
 from torch.utils.data import DataLoader
-from transformers import default_data_collator
+
+def pad_and_collate(features, pad_token_id, label_pad_token_id=-100):
+    batch = {}
+    max_len = max(len(f["input_ids"]) for f in features)
+    
+    input_ids = []
+    attention_mask = []
+    labels = []
+    
+    for f in features:
+        diff = max_len - len(f["input_ids"])
+        input_ids.append(f["input_ids"] + [pad_token_id] * diff)
+        attention_mask.append(f["attention_mask"] + [0] * diff)
+        labels.append(f["labels"] + [label_pad_token_id] * diff)
+        
+    batch["input_ids"] = torch.tensor(input_ids, dtype=torch.long)
+    batch["attention_mask"] = torch.tensor(attention_mask, dtype=torch.long)
+    batch["labels"] = torch.tensor(labels, dtype=torch.long)
+    return batch
 
 def evaluate_model(
     model,
@@ -9,6 +27,7 @@ def evaluate_model(
     device,
     batch_size: int = 4,
     length_buckets: list = None,
+    pad_token_id: int = 0,
 ):
     """Evaluates the model on an evaluation dataset and returns detailed metrics.
     
@@ -20,7 +39,7 @@ def evaluate_model(
         eval_dataset,
         batch_size=batch_size,
         shuffle=False,
-        collate_fn=default_data_collator,
+        collate_fn=lambda x: pad_and_collate(x, pad_token_id),
     )
     
     if length_buckets is None:

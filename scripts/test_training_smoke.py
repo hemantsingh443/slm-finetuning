@@ -15,6 +15,7 @@ from src.models.loader import load_model_and_tokenizer
 from src.models.lora import get_lora_model
 from src.training.callbacks import initialize_wandb, WandBLogger
 from src.training.trainer import CausalLMTrainer
+from src.training.checkpoint_manager import CheckpointManager
 
 # Set W&B to offline mode to run unit tests without internet/credentials
 os.environ["WANDB_MODE"] = "offline"
@@ -81,7 +82,9 @@ class TestTrainingSmoke(unittest.TestCase):
                 "gradient_checkpointing": False,
                 "batch_size": 1,
                 "epochs": 1,
-                "logging_steps": 1
+                "logging_steps": 1,
+                "save_steps": 5,
+                "eval_steps": 5,
             }
         }
         
@@ -124,6 +127,13 @@ class TestTrainingSmoke(unittest.TestCase):
         wandb_logger = WandBLogger(project="smoke-test", name="training-run")
         wandb_logger.initialize()
 
+        # Initialize CheckpointManager
+        test_checkpoint_dir = os.path.join(project_root, "test_checkpoints")
+        import shutil
+        if os.path.exists(test_checkpoint_dir):
+            shutil.rmtree(test_checkpoint_dir)
+        checkpoint_manager = CheckpointManager(base_dir=test_checkpoint_dir, wandb_logger=wandb_logger)
+
         # 8. Train single epoch (first 10 steps)
         # Select the first block and replicate it 10 times to ensure training is on identical inputs,
         # which guarantees the loss consistently decreases.
@@ -136,7 +146,8 @@ class TestTrainingSmoke(unittest.TestCase):
             device="cpu",
             training_config=training_config,
             wandb_logger=wandb_logger,
-            tokenizer=tokenizer
+            tokenizer=tokenizer,
+            checkpoint_manager=checkpoint_manager
         )
         
         losses = trainer.train()
@@ -148,6 +159,13 @@ class TestTrainingSmoke(unittest.TestCase):
         self.assertIn("token_loss", eval_metrics["overall"])
         
         wandb_logger.finish()
+
+        # Assert checkpoints were saved
+        self.assertTrue(os.path.exists(os.path.join(test_checkpoint_dir, "step_5")))
+        self.assertTrue(os.path.exists(os.path.join(test_checkpoint_dir, "final")))
+        
+        # Clean up test checkpoints
+        shutil.rmtree(test_checkpoint_dir)
 
         self.assertEqual(len(losses), 10, "Expected exactly 10 training steps.")
         

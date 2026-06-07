@@ -17,6 +17,8 @@ class CausalLMTrainer:
         wandb_logger=None,
         scheduler=None,
         tokenizer=None,
+        checkpoint_manager=None,
+        eval_dataset=None,
     ):
         self.model = model.to(device)
         self.train_dataset = train_dataset
@@ -26,12 +28,18 @@ class CausalLMTrainer:
         self.wandb_logger = wandb_logger
         self.training_config = training_config
         self.tokenizer = tokenizer
+        self.checkpoint_manager = checkpoint_manager
+        self.eval_dataset = eval_dataset
 
         self.config = training_config.get("training", {}) if training_config else {}
         self.batch_size = self.config.get("batch_size", 1)
         self.epochs = self.config.get("epochs", 1)
         self.logging_steps = self.config.get("logging_steps", 10)
         self.grad_clip_norm = self.config.get("max_grad_norm", 1.0)
+        
+        self.save_steps = self.config.get("save_steps", 500)
+        self.eval_steps = self.config.get("eval_steps", 500)
+        self.max_steps = self.config.get("max_steps", None)
 
     def train(self):
         self.model.train()
@@ -135,7 +143,44 @@ class CausalLMTrainer:
                             "epoch": epoch,
                         }, step=global_step)
 
+                # Periodic Evaluation
+                if self.eval_dataset is not None and global_step > 0 and global_step % self.eval_steps == 0:
+                    if isinstance(self.eval_dataset, dict):
+                        for eval_name, eval_ds in self.eval_dataset.items():
+                            self.evaluate(eval_ds, name=eval_name, global_step=global_step)
+                    else:
+                        self.evaluate(self.eval_dataset, global_step=global_step)
+
+                # Periodic Checkpointing
+                if self.checkpoint_manager is not None and global_step > 0 and global_step % self.save_steps == 0:
+                    self.checkpoint_manager.save_checkpoint(
+                        model=self.model,
+                        step=global_step,
+                        epoch=epoch,
+                        is_final=False
+                    )
+
                 global_step += 1
+                if self.max_steps is not None and global_step >= self.max_steps:
+                    break
+            if self.max_steps is not None and global_step >= self.max_steps:
+                break
+
+        # Final Evaluation and Checkpoint at the end of training
+        if self.eval_dataset is not None:
+            if isinstance(self.eval_dataset, dict):
+                for eval_name, eval_ds in self.eval_dataset.items():
+                    self.evaluate(eval_ds, name=eval_name, global_step=global_step)
+            else:
+                self.evaluate(self.eval_dataset, global_step=global_step)
+
+        if self.checkpoint_manager is not None:
+            self.checkpoint_manager.save_checkpoint(
+                model=self.model,
+                step=global_step,
+                epoch=epoch,
+                is_final=True
+            )
 
         return step_losses
 
@@ -143,11 +188,13 @@ class CausalLMTrainer:
         """Runs evaluation on eval_dataset and logs metrics to W&B."""
         from src.evaluation.metrics import evaluate_model
         
+        pad_id = self.tokenizer.pad_token_id if (self.tokenizer and self.tokenizer.pad_token_id is not None) else 0
         metrics = evaluate_model(
             model=self.model,
             eval_dataset=eval_dataset,
             device=self.device,
             batch_size=self.batch_size,
+            pad_token_id=pad_id,
         )
         
         overall = metrics["overall"]

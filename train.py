@@ -72,8 +72,9 @@ def main():
     train_mixture_config = datasets_config.get("datasets", {}).get("train", [])
     preprocessing_config = datasets_config.get("preprocessing", {})
     
-    # Enable streaming if limit_samples is specified and small
-    use_streaming = args.limit_samples is not None and args.limit_samples <= 10000
+    # Always use streaming to avoid downloading massive dataset files (like OpenWebText 24GB)
+    use_streaming = True
+    total_limit = args.limit_samples if args.limit_samples is not None else 300000
 
     train_mixture = create_dataset_mixture(
         datasets_config=train_mixture_config,
@@ -82,14 +83,9 @@ def main():
         seed=training_config.get("seed", 42),
     )
 
-    if use_streaming:
-        print(f"Streaming mode enabled. Materializing first {args.limit_samples} samples...", flush=True)
-        train_mixture = train_mixture.take(args.limit_samples)
-        train_mixture = Dataset.from_list(list(train_mixture))
-    else:
-        # Apply limit_samples to non-streaming train configs if specified
-        if args.limit_samples and args.limit_samples < len(train_mixture):
-            train_mixture = train_mixture.select(range(args.limit_samples))
+    print(f"Streaming mode enabled. Materializing first {total_limit} samples from stream...", flush=True)
+    train_mixture = train_mixture.take(total_limit)
+    train_mixture = Dataset.from_list(list(train_mixture))
 
     print(f"Loaded training dataset of size: {len(train_mixture)}", flush=True)
 

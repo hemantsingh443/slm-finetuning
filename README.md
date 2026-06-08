@@ -62,17 +62,29 @@ pip install -r requirements.txt
 ```
 
 ### 2. Fine-Tuning
-
-Execute the fine-tuning training pipeline on Pythia-410m:
-
+Execute the fine-tuning training pipeline on Pythia-410m using default configurations:
 ```bash
 python train.py
 ```
+Alternatively, you can override hyperparameter configurations directly via command-line flags:
+```bash
+python train.py --lora_rank 16 --batch_size 4 --steps 2000 --precision fp16
+```
 
 ### 3. Profiling & Benchmarking
-
-Run the hardware scaling profiling sweep (measuring generation throughput, latency, and VRAM memory footprint across batch sizes, sequence lengths, and precision modes):
-
+Run the hardware scaling profiling sweeps (measuring throughput, latency, and VRAM footprint across batch sizes, sequence lengths, and precision modes) for the base model or a specific custom checkpoint:
 ```bash
+# Benchmark the default model config
 python scripts/run_benchmarks.py
+
+# Benchmark a specific fine-tuned local checkpoint
+python scripts/run_benchmarks.py --model checkpoints/final
+```
+
+### 4. Automated End-to-End Pipeline
+You can run the entire pipeline (fine-tuning a model and running the benchmark sweep on the resulting final checkpoint sequentially) using the `run_full_pipeline.py` orchestrator script.
+
+For example, to run a quick automated training and benchmarking smoke test:
+```bash
+python scripts/run_full_pipeline.py --model_name EleutherAI/pythia-160m --steps 10 --limit_samples 1000 --checkpoint_dir checkpoints/smoke_test
 ```
